@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Times mimegoose against Go on the same work: tools/bench.goose (built
+"""Times mime against Go on the same work: tools/bench.goose (built
 with the C compiler) and tools/mimeoracle.sh bench.
 
     python3 scripts/bench.py [--goose PATH]

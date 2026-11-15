@@ -9,6 +9,7 @@
 import std;
 import dictionary;
 import mime from "..";
+import bignum from "SorinS/bigmongoose@v0.7.0";
 import mime.textproto;
 import tv;
 

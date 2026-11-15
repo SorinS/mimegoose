@@ -8,6 +8,7 @@
 import std;
 import os;
 import mime from "..";
+import bignum from "SorinS/bigmongoose@v0.7.0";
 import mime.quotedprintable;
 import tv;
 

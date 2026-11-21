@@ -34,7 +34,7 @@ namespace multipart;
 import std;
 import dictionary;
 import mime;
-import bignum.entropy;
+import entropy;
 import textproto;
 import quotedprintable;
 
@@ -441,7 +441,7 @@ struct Writer {
 fn new_writer() -> Writer {
     var w = Writer { .. };
     var raw: u8[30] = [0; 30];
-    bignum::random_bytes(raw);
+    entropy::random_bytes(raw);
     for b in raw { w.boundary.push(mime::LOWERHEX[b >> 4]); w.boundary.push(mime::LOWERHEX[b & 15]); }
     return w;
 }

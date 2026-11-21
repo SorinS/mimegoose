@@ -4,7 +4,8 @@
 
 import std;
 import mime from "..";
-import bignum from "SorinS/bigmongoose@v0.7.0";
+import entropy from "SorinS/entropygoose@v0.9.1";
+import sys from "SorinS/osgoose@v0.9.1";
 import mime.encodedword;
 import tv;
 

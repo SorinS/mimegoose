@@ -20,8 +20,9 @@ The namespaces follow Go's packages, so `mime::parse_media_type`,
 `quotedprintable::decode`, `multipart::next`, `textproto::get`.
 
 ```goose
-import mime from "SorinS/mimegoose@v0.7.0";
-import bignum from "SorinS/bigmongoose@v0.7.0";   // mime needs it; the root declares it
+import mime from "SorinS/mimegoose@v0.9.1";
+import entropy from "SorinS/entropygoose@v0.9.1";   // mime needs it; the root declares it
+import sys from "SorinS/osgoose@v0.9.1";
 import mime.multipart;
 
 let mt = mime::parse_media_type(content_type);       // mt.err, mt.typ, mt.params
@@ -161,7 +162,7 @@ fn file_name(r: const Reader&) -> u8[>..]             // Part.FileName (filepath
 fn has_file_name(r: const Reader&) -> bool             // a filename parameter: a file, for ReadForm
 fn message(r: const Reader&, out: u8[>..]&)
 
-struct Writer { .. }    fn new_writer() -> Writer     // a random boundary from getentropy(3)
+struct Writer { .. }    fn new_writer() -> Writer     // a random boundary from entropy::random_bytes
 fn boundary(w) -> const u8[:]    fn set_boundary(w, b) -> i64    fn form_data_content_type(w) -> u8[>..]
 fn create_part(w, out, fields: const mime::KV[:]) -> i64     fn create_part(w, out, h: const textproto::Header&) -> i64
 fn create_form_file(w, out, fieldname, filename) -> i64      fn create_form_field(w, out, fieldname) -> i64
@@ -282,10 +283,10 @@ Deliberate, or where Go's own result depends on how its input is read:
   `strings.Reader` reading, or the whole line.
 * **ReadForm's temporary files**: one per spilled file (Go's
   `GODEBUG=multipartfiles=distinct`), named `multipart-` and 16 random hex
-  digits in `Form.tmp_dir`, else `$TMPDIR`, else `/tmp`; created with
-  `O_CREAT|O_EXCL|O_NOFOLLOW`, mode 0600 (`src/path.c`): never a file or
-  a symbolic link that is there (another random name is tried), never
-  readable by other users. File contents are read whole
+  digits in `Form.tmp_dir`, else Go's `os.TempDir` (`$TMPDIR` or `/tmp`; `%TMP%` or `%TEMP%` on Windows); created with
+  gslib's `sys::create_file`: `O_CREAT|O_EXCL|O_NOFOLLOW`, mode 0600 (an
+  owner-only DACL on Windows): never a file or a symbolic link that is
+  there (another random name is tried), never readable by other users. File contents are read whole
   (`file_content`), not through Go's `File` (`ReaderAt`, `Seeker`).
 * **FileName** is Go's `filepath.Base` of the parameter, and then safer
   than Go's: a backslash is a separator on every system (browsers send
@@ -306,12 +307,9 @@ Deliberate, or where Go's own result depends on how its input is read:
   and are set by the caller.
 * **mime.types**: `bufio.Scanner` stops (and Go panics) on a line of more
   than 64 KiB in a system file; such lines are read here.
-* **Windows** is untested: the registry is not read (the built-in table
-  only); `getentropy` (random boundaries, temporary file names) comes from
-  the C library by crypto/bignum's entropy module, which has no Windows
-  source yet, so `new_writer` and spilling a form's files are expected to
-  fail there; `FileName` follows Windows' `filepath.Base` there
-  (`src/path.c`).
+* **Windows**: the registry is not read (the built-in table only);
+  `FileName` follows Windows' `filepath.Base` there (`sys::is_windows`). The
+  tests pass on Windows Server 2022.
 
 ## Not done
 
@@ -319,4 +317,4 @@ Deliberate, or where Go's own result depends on how its input is read:
   it; it needs Go's `time` layouts and zones, a module of its own.
 * `net/textproto`'s other readers and writers (lines, codes, dot encoding).
 * One temporary file for all of a form's spilled files (Go's default).
-* Windows: the registry's types, an entropy source.
+* Windows: the registry's types.

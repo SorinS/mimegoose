@@ -1,7 +1,0 @@
-// mime's sidecar: src/path.c, multipart's platform constant (file names
-// follow the platform's path rules, as Go's filepath.Base does) and its
-// forms' temporary files.
-c_sources = ["src/path.c"];
-
-// Programs, not the package's modules.
-exclude = ["examples", "test", "tools", "scripts"];

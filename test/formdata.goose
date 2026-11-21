@@ -10,11 +10,11 @@
 import std;
 import os;
 import mime from "..";
-import bignum from "SorinS/bigmongoose@v0.7.0";
+import entropy from "SorinS/entropygoose@v0.9.1";
+import sys from "SorinS/osgoose@v0.9.1";
 import mime.textproto;
 import mime.multipart;
 import mime.formdata;
-import bignum.entropy;
 import tv;
 
 let MAX_INT64: i64 = 9223372036854775807;
@@ -206,15 +206,27 @@ fn metadata_too_large() {
     }
 }
 
+// Where the test's own directories go, as multipart's temp_dir picks
+// one: TMPDIR, else /tmp; TMP or TEMP on Windows. Ends in a '/'.
+fn temp_base() -> u8[>..] {
+    var dir: u8[>..] = [];
+    if mime::is_windows() {
+        if !::env("TMP", dir) || dir.len == 0 { dir.clear(); ::env("TEMP", dir); }
+    } else {
+        ::env("TMPDIR", dir);
+    }
+    if dir.len == 0 { dir.append("/tmp"); }
+    if dir[dir.len - 1] != '/' && dir[dir.len - 1] != '\\' { dir.push('/'); }
+    return dir;
+}
+
 // TestReadForm_ManyFiles_Distinct: ReadForm(0) puts every file on disk,
 // one temporary file each (Go's GODEBUG multipartfiles=distinct), and
 // RemoveAll removes them.
 fn many_files() {
-    var dir: u8[>..] = [];
-    if !::env("TMPDIR", dir) || dir.len == 0 { dir.clear(); dir.append("/tmp"); }
-    if dir[dir.len - 1] != '/' { dir.push('/'); }
+    var dir = temp_base();
     var rnd: u8[6] = [0; 6];
-    bignum::random_bytes(rnd);
+    entropy::random_bytes(rnd);
     dir.append("mimegoose-test-");
     for b in rnd { dir.push(mime::LOWERHEX[b >> 4]); dir.push(mime::LOWERHEX[b & 15]); }
     tv::check("temp dir", ::make_dir(dir));
@@ -310,21 +322,28 @@ fn endless_header_line() {
     }
 }
 
+// Whether only this user can reach path's file: sys::is_private.
+fn is_private(path: const u8[:]) -> bool {
+    let fd = sys::open(path, sys::O_RDONLY, 0);
+    if fd < 0 { return false; }
+    let p = sys::is_private(fd);
+    sys::close(fd);
+    return p == 1;
+}
+
 // Temporary files: new (O_EXCL), mode 0600; a name that is there is not
 // written through.
 fn private_temp_files() {
-    var dir: u8[>..] = [];
-    if !::env("TMPDIR", dir) || dir.len == 0 { dir.clear(); dir.append("/tmp"); }
-    if dir[dir.len - 1] != '/' { dir.push('/'); }
+    var dir = temp_base();
     var rnd: u8[6] = [0; 6];
-    bignum::random_bytes(rnd);
+    entropy::random_bytes(rnd);
     dir.append("mimegoose-priv-");
     for b in rnd { dir.push(mime::LOWERHEX[b >> 4]); dir.push(mime::LOWERHEX[b & 15]); }
     tv::check("temp dir", ::make_dir(dir));
     let p = str(dir, "/x");
-    tv::check_int("create", mime::mime_create_private(p, "secret"), 0);
-    if !mime::is_windows() { tv::check_int("  mode 0600", mime::mime_file_mode(p), 0x180); }   // 0600
-    tv::check_int("  again: refused, there already", mime::mime_create_private(p, "other"), 1);
+    tv::check_int("create", sys::create_file(p, "secret", 384), 0);
+    tv::check("  private (0600; Windows: its DACL)", is_private(p));
+    tv::check("  again: refused, there already", sys::is_exist(sys::create_file(p, "other", 384)));
     var c: u8[>..] = [];
     ::read_file(p, c);
     tv::check_eq("  not written through", c, "secret");
@@ -345,7 +364,7 @@ fn private_temp_files() {
     tv::check_int("spilled form", multipart::read_form(r, f), 0);
     let k = multipart::form_file(f, "f");
     tv::check("  on disk", k >= 0 && multipart::file_on_disk(f, k));
-    if k >= 0 && !mime::is_windows() { tv::check_int("  mode 0600", mime::mime_file_mode(multipart::file_tmpfile(f, k)), 0x180); }   // 0600
+    if k >= 0 { tv::check("  private (0600; Windows: its DACL)", is_private(multipart::file_tmpfile(f, k))); }
     multipart::remove_all(f);
     ::delete_dir(dir);
 }
@@ -361,7 +380,10 @@ fn file_names() {
         multipart::feed(mr, str("--b\r\nContent-Disposition: form-data; name=\"f\"; filename*=utf-8''", row[0], "\r\n\r\nx\r\n--b--\r\n"));
         multipart::finish(mr);
         { let ev = multipart::next_part(mr); tv::check_int(str("file name part ", row[0]), ev, multipart::EV_PART); }
-        tv::check_eq(str("file_name ", row[0]), multipart::file_name(mr), row[1]);
+        // On Windows filepath.Base drops a trailing \ ("a\" is "a", as Go
+        // has it there); elsewhere a name ending in a separator gives "".
+        let want = if mime::is_windows() && row[0] == "a%5C" { "a" } else { row[1] };
+        tv::check_eq(str("file_name ", row[0]), multipart::file_name(mr), want);
         var f = multipart::Form { .. };
         var r2 = multipart::Reader { .. };
         multipart::init(r2, "b");
@@ -372,7 +394,7 @@ fn file_names() {
         tv::check_int(str("  read_form ", row[0]), rc, 0);
         let k = multipart::form_file(f, "f");
         tv::check(str("  still a file ", row[0]), k >= 0);
-        if k >= 0 { tv::check_eq(str("  its name ", row[0]), multipart::file_filename(f, k), row[1]); }
+        if k >= 0 { tv::check_eq(str("  its name ", row[0]), multipart::file_filename(f, k), want); }
     }
 }
 
